@@ -767,12 +767,11 @@ func (ids *idService) consumeMessage(mes *pb.Identify, c network.Conn, isPush bo
 	// add signed addrs if we have them and the peerstore supports them
 	cab, ok := peerstore.GetCertifiedAddrBook(ids.Host.Peerstore())
 	if ok && signedPeerRecord != nil {
-		_, addErr := cab.ConsumePeerRecord(signedPeerRecord, ttl)
-		if addErr != nil {
-			log.Debugf("error adding signed addrs to peerstore: %v", addErr)
+		if _, err := cab.ConsumePeerRecord(signedPeerRecord, ttl); err != nil {
+			log.Debugf("error adding signed addrs to peerstore: %v", err)
 		}
 	} else {
-		ids.Host.Peerstore().AddAddrs(p, lmaddrs, ttl)
+		ids.Host.Peerstore().AddAddrs(p, filterAddrs(lmaddrs, c.RemoteMultiaddr()), ttl)
 	}
 
 	// Finally, expire all temporary addrs.
@@ -962,3 +961,17 @@ func (nn *netNotifiee) Disconnected(_ network.Network, c network.Conn) {
 
 func (nn *netNotifiee) Listen(n network.Network, a ma.Multiaddr)      {}
 func (nn *netNotifiee) ListenClose(n network.Network, a ma.Multiaddr) {}
+
+// filterAddrs filters the address slice based on the remove multiaddr:
+// * if it's a localhost address, no filtering is applied
+// * if it's a local network address, all localhost addresses are filtered out
+// * if it's a public address, all localhost and local network addresses are filtered out
+func filterAddrs(addrs []ma.Multiaddr, remote ma.Multiaddr) []ma.Multiaddr {
+	if manet.IsIPLoopback(remote) {
+		return addrs
+	}
+	if manet.IsPrivateAddr(remote) {
+		return ma.FilterAddrs(addrs, func(a ma.Multiaddr) bool { return !manet.IsIPLoopback(a) })
+	}
+	return ma.FilterAddrs(addrs, manet.IsPublicAddr)
+}
