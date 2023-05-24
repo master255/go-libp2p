@@ -46,7 +46,7 @@ import (
 type AddrsFactory = bhost.AddrsFactory
 
 // NATManagerC is a NATManager constructor.
-type NATManagerC func(network.Network) bhost.NATManager
+type NATManagerC func(network.Network, string) bhost.NATManager
 
 type RoutingC func(host.Host) (routing.PeerRouting, error)
 

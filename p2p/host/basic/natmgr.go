@@ -25,8 +25,8 @@ type NATManager interface {
 }
 
 // NewNATManager creates a NAT manager.
-func NewNATManager(net network.Network) NATManager {
-	return newNATManager(net)
+func NewNATManager(net network.Network, userAgent string) NATManager {
+	return newNATManager(net, userAgent)
 }
 
 type entry struct {
@@ -42,7 +42,7 @@ type nat interface {
 }
 
 // so we can mock it in tests
-var discoverNAT = func(ctx context.Context) (nat, error) { return inat.DiscoverNAT(ctx) }
+var discoverNAT = func(ctx context.Context, userAgent string) (nat, error) { return inat.DiscoverNAT(ctx, userAgent) }
 
 // natManager takes care of adding + removing port mappings to the nat.
 // Initialized with the host if it has a NATPortMap option enabled.
@@ -63,7 +63,7 @@ type natManager struct {
 	ctxCancel context.CancelFunc
 }
 
-func newNATManager(net network.Network) *natManager {
+func newNATManager(net network.Network, userAgent string) *natManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	nmgr := &natManager{
 		net:       net,
@@ -72,7 +72,7 @@ func newNATManager(net network.Network) *natManager {
 		tracked:   make(map[entry]bool),
 	}
 	nmgr.refCount.Add(1)
-	go nmgr.background(ctx)
+	go nmgr.background(ctx, userAgent)
 	return nmgr
 }
 
@@ -84,7 +84,7 @@ func (nmgr *natManager) Close() error {
 	return nil
 }
 
-func (nmgr *natManager) background(ctx context.Context) {
+func (nmgr *natManager) background(ctx context.Context, userAgent string) {
 	defer nmgr.refCount.Done()
 
 	defer func() {
@@ -98,7 +98,7 @@ func (nmgr *natManager) background(ctx context.Context) {
 
 	discoverCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	natInstance, err := discoverNAT(discoverCtx)
+	natInstance, err := discoverNAT(discoverCtx, userAgent)
 	if err != nil {
 		log.Info("DiscoverNAT error:", err)
 		return

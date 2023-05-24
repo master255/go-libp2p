@@ -34,7 +34,7 @@ type entry struct {
 var discoverGateway = nat.DiscoverGateway
 
 // DiscoverNAT looks for a NAT device in the network and returns an object that can manage port mappings.
-func DiscoverNAT(ctx context.Context) (*NAT, error) {
+func DiscoverNAT(ctx context.Context, userAgent string) (*NAT, error) {
 	natInstance, err := discoverGateway(ctx)
 	if err != nil {
 		return nil, err
@@ -60,6 +60,7 @@ func DiscoverNAT(ctx context.Context) (*NAT, error) {
 		mappings:  make(map[entry]int),
 		ctx:       ctx,
 		ctxCancel: cancel,
+		userAgent: userAgent,
 	}
 	nat.refCount.Add(1)
 	go func() {
@@ -77,7 +78,8 @@ type NAT struct {
 	natmu sync.Mutex
 	nat   nat.NAT
 	// External IP of the NAT. Will be renewed periodically (every CacheTime).
-	extAddr netip.Addr
+	extAddr   netip.Addr
+	userAgent string
 
 	refCount  sync.WaitGroup
 	ctx       context.Context
@@ -220,14 +222,13 @@ func (nat *NAT) background() {
 
 func (nat *NAT) establishMapping(protocol string, internalPort int) (externalPort int) {
 	log.Debugf("Attempting port map: %s/%d", protocol, internalPort)
-	const comment = "libp2p"
 
 	nat.natmu.Lock()
 	var err error
-	externalPort, err = nat.nat.AddPortMapping(protocol, internalPort, comment, MappingDuration)
+	externalPort, err = nat.nat.AddPortMapping(protocol, internalPort, nat.userAgent, MappingDuration)
 	if err != nil {
 		// Some hardware does not support mappings with timeout, so try that
-		externalPort, err = nat.nat.AddPortMapping(protocol, internalPort, comment, 0)
+		externalPort, err = nat.nat.AddPortMapping(protocol, internalPort, nat.userAgent, 0)
 	}
 	nat.natmu.Unlock()
 
