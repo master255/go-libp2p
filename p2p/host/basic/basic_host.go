@@ -131,7 +131,7 @@ type HostOpts struct {
 
 	// NATManager takes care of setting NAT port mappings, and discovering external addresses.
 	// If omitted, this will simply be disabled.
-	NATManager func(network.Network, string) NATManager
+	NATManager func(network.Network) NATManager
 
 	// ConnManager is a libp2p connection manager
 	ConnManager connmgr.ConnManager
@@ -268,7 +268,7 @@ func NewHost(n network.Network, opts *HostOpts) (*BasicHost, error) {
 	}
 
 	if opts.NATManager != nil {
-		h.natmgr = opts.NATManager(n, opts.UserAgent)
+		h.natmgr = opts.NATManager(n)
 	}
 
 	if opts.MultiaddrResolver != nil {

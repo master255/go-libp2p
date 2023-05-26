@@ -25,8 +25,8 @@ type NATManager interface {
 }
 
 // NewNATManager creates a NAT manager.
-func NewNATManager(net network.Network, userAgent string) NATManager {
-	return newNATManager(net, userAgent)
+func NewNATManager(net network.Network) NATManager {
+	return newNATManager(net)
 }
 
 type entry struct {
@@ -63,7 +63,7 @@ type natManager struct {
 	ctxCancel context.CancelFunc
 }
 
-func newNATManager(net network.Network, userAgent string) *natManager {
+func newNATManager(net network.Network) *natManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	nmgr := &natManager{
 		net:       net,
@@ -72,7 +72,7 @@ func newNATManager(net network.Network, userAgent string) *natManager {
 		tracked:   make(map[entry]bool),
 	}
 	nmgr.refCount.Add(1)
-	go nmgr.background(ctx, userAgent)
+	go nmgr.background(ctx)
 	return nmgr
 }
 
@@ -84,7 +84,7 @@ func (nmgr *natManager) Close() error {
 	return nil
 }
 
-func (nmgr *natManager) background(ctx context.Context, userAgent string) {
+func (nmgr *natManager) background(ctx context.Context) {
 	defer nmgr.refCount.Done()
 
 	defer func() {
@@ -98,7 +98,7 @@ func (nmgr *natManager) background(ctx context.Context, userAgent string) {
 
 	discoverCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	natInstance, err := discoverNAT(discoverCtx, userAgent)
+	natInstance, err := discoverNAT(discoverCtx, nmgr.net.UserAgent())
 	if err != nil {
 		log.Info("DiscoverNAT error:", err)
 		return
