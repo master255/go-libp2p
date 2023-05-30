@@ -33,8 +33,6 @@ const (
 	defaultDialTimeoutLocal = 5 * time.Second
 )
 
-const defaultUserAgent = "libp2p"
-
 var log = logging.Logger("swarm2")
 
 // ErrSwarmClosed is returned when one attempts to operate on a closed swarm.
@@ -62,14 +60,6 @@ func WithConnectionGater(gater connmgr.ConnectionGater) Option {
 func WithMultiaddrResolver(maResolver *madns.Resolver) Option {
 	return func(s *Swarm) error {
 		s.maResolver = maResolver
-		return nil
-	}
-}
-
-// WithUserAgent sets a custom user agent description
-func WithUserAgent(userAgent string) Option {
-	return func(s *Swarm) error {
-		s.userAgent = userAgent
 		return nil
 	}
 }
@@ -173,8 +163,6 @@ type Swarm struct {
 
 	bwc           metrics.Reporter
 	metricsTracer MetricsTracer
-
-	userAgent string
 }
 
 // NewSwarm constructs a Swarm.
@@ -193,7 +181,6 @@ func NewSwarm(local peer.ID, peers peerstore.Peerstore, eventBus event.Bus, opts
 		dialTimeout:      defaultDialTimeout,
 		dialTimeoutLocal: defaultDialTimeoutLocal,
 		maResolver:       madns.DefaultResolver,
-		userAgent:        defaultUserAgent,
 	}
 
 	s.conns.m = make(map[peer.ID][]*Conn)
@@ -372,11 +359,6 @@ func (s *Swarm) addConn(tc transport.CapableConn, dir network.Direction) (*Conn,
 // Peerstore returns this swarms internal Peerstore.
 func (s *Swarm) Peerstore() peerstore.Peerstore {
 	return s.peers
-}
-
-// UserAgent returns this swarms internal userAgent.
-func (s *Swarm) UserAgent() string {
-	return s.userAgent
 }
 
 // SetStreamHandler assigns the handler for new streams.

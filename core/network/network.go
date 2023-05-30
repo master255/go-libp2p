@@ -148,9 +148,6 @@ type Network interface {
 
 	// ResourceManager returns the ResourceManager associated with this network
 	ResourceManager() ResourceManager
-
-	// UserAgent returns the user agent associated with this network
-	UserAgent() string
 }
 
 // Dialer represents a service that can dial out to peers

@@ -46,7 +46,7 @@ import (
 type AddrsFactory = bhost.AddrsFactory
 
 // NATManagerC is a NATManager constructor.
-type NATManagerC func(network.Network) bhost.NATManager
+type NATManagerC func(network.Network, bhost.Option) (bhost.NATManager, error)
 
 type RoutingC func(host.Host) (routing.PeerRouting, error)
 
@@ -172,9 +172,6 @@ func (cfg *Config) makeSwarm(eventBus event.Bus, enableMetrics bool) (*swarm.Swa
 	}
 	if cfg.MultiaddrResolver != nil {
 		opts = append(opts, swarm.WithMultiaddrResolver(cfg.MultiaddrResolver))
-	}
-	if cfg.UserAgent != "" {
-		opts = append(opts, swarm.WithUserAgent(cfg.UserAgent))
 	}
 	if enableMetrics {
 		opts = append(opts,
