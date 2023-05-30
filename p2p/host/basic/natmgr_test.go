@@ -33,7 +33,8 @@ func TestMapping(t *testing.T) {
 
 	sw := swarmt.GenSwarm(t)
 	defer sw.Close()
-	m := newNATManager(sw)
+	m, err := newNATManager(sw)
+	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		m.natMx.Lock()
 		defer m.natMx.Unlock()
@@ -67,7 +68,8 @@ func TestAddAndRemoveListeners(t *testing.T) {
 
 	sw := swarmt.GenSwarm(t)
 	defer sw.Close()
-	m := newNATManager(sw)
+	m, err := newNATManager(sw)
+	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		m.natMx.Lock()
 		defer m.natMx.Unlock()
