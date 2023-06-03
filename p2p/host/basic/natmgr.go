@@ -28,8 +28,8 @@ type NATManager interface {
 }
 
 // NewNATManager creates a NAT manager.
-func NewNATManager(net network.Network, opt Option) (NATManager, error) {
-	return newNATManager(net, opt)
+func NewNATManager(net network.Network, opt ...Option) (NATManager, error) {
+	return newNATManager(net, opt...)
 }
 
 type entry struct {
