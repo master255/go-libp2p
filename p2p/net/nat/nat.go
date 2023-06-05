@@ -120,7 +120,7 @@ func (nat *NAT) GetMapping(protocol string, port int) (addr netip.AddrPort, foun
 //
 // May not succeed, and mappings may change over time;
 // NAT devices may not respect our port requests, and even lie.
-func (nat *NAT) AddMapping(protocol string, port int) error {
+func (nat *NAT) AddMapping(ctx context.Context, protocol string, port int) error {
 	switch protocol {
 	case "tcp", "udp":
 	default:
@@ -136,14 +136,14 @@ func (nat *NAT) AddMapping(protocol string, port int) error {
 
 	// do it once synchronously, so first mapping is done right away, and before exiting,
 	// allowing users -- in the optimistic case -- to use results right after.
-	extPort := nat.establishMapping(protocol, port)
+	extPort := nat.establishMapping(ctx, protocol, port)
 	nat.mappings[entry{protocol: protocol, port: port}] = extPort
 	return nil
 }
 
 // RemoveMapping removes a port mapping.
 // It blocks until the NAT has removed the mapping.
-func (nat *NAT) RemoveMapping(protocol string, port int) error {
+func (nat *NAT) RemoveMapping(ctx context.Context, protocol string, port int) error {
 	nat.mappingmu.Lock()
 	defer nat.mappingmu.Unlock()
 
@@ -152,7 +152,7 @@ func (nat *NAT) RemoveMapping(protocol string, port int) error {
 		e := entry{protocol: protocol, port: port}
 		if _, ok := nat.mappings[e]; ok {
 			delete(nat.mappings, e)
-			return nat.nat.DeletePortMapping(protocol, port)
+			return nat.nat.DeletePortMapping(ctx, protocol, port)
 		}
 		return errors.New("unknown mapping")
 	default:
@@ -186,7 +186,7 @@ func (nat *NAT) background() {
 				// Establishing the mapping involves network requests.
 				// Don't hold the mutex, just save the ports.
 				for _, e := range in {
-					out = append(out, nat.establishMapping(e.protocol, e.port))
+					out = append(out, nat.establishMapping(nat.ctx, e.protocol, e.port))
 				}
 				nat.mappingmu.Lock()
 				for i, p := range in {
@@ -210,9 +210,11 @@ func (nat *NAT) background() {
 			t.Reset(time.Until(minTime(nextAddrUpdate, nextMappingUpdate)))
 		case <-nat.ctx.Done():
 			nat.mappingmu.Lock()
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
 			for e := range nat.mappings {
 				delete(nat.mappings, e)
-				nat.nat.DeletePortMapping(e.protocol, e.port)
+				nat.nat.DeletePortMapping(ctx, e.protocol, e.port)
 			}
 			nat.mappingmu.Unlock()
 			return
@@ -220,15 +222,15 @@ func (nat *NAT) background() {
 	}
 }
 
-func (nat *NAT) establishMapping(protocol string, internalPort int) (externalPort int) {
+func (nat *NAT) establishMapping(ctx context.Context, protocol string, internalPort int) (externalPort int) {
 	log.Debugf("Attempting port map: %s/%d", protocol, internalPort)
 
 	nat.natmu.Lock()
 	var err error
-	externalPort, err = nat.nat.AddPortMapping(protocol, internalPort, nat.userAgent, MappingDuration)
+	externalPort, err = nat.nat.AddPortMapping(ctx, protocol, internalPort, nat.userAgent, MappingDuration)
 	if err != nil {
 		// Some hardware does not support mappings with timeout, so try that
-		externalPort, err = nat.nat.AddPortMapping(protocol, internalPort, nat.userAgent, 0)
+		externalPort, err = nat.nat.AddPortMapping(ctx, protocol, internalPort, nat.userAgent, 0)
 	}
 	nat.natmu.Unlock()
 
