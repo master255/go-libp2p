@@ -24,6 +24,7 @@ const defaultUserAgent = "libp2p"
 // and tries to obtain port mappings for those.
 type NATManager interface {
 	GetMapping(ma.Multiaddr) ma.Multiaddr
+	HasDiscoveredNAT() bool
 	io.Closer
 }
 
@@ -98,6 +99,12 @@ func (nmgr *natManager) Close() error {
 	nmgr.ctxCancel()
 	nmgr.refCount.Wait()
 	return nil
+}
+
+func (nmgr *natManager) HasDiscoveredNAT() bool {
+	nmgr.natMx.RLock()
+	defer nmgr.natMx.RUnlock()
+	return nmgr.nat != nil
 }
 
 func (nmgr *natManager) background(ctx context.Context) {
