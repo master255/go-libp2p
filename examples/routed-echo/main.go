@@ -1,5 +1,3 @@
-//go:build !go1.21
-
 package main
 
 import (
@@ -85,7 +83,7 @@ func makeRoutedHost(listenPort int, randseed int64, bootstrapPeers []peer.AddrIn
 	}
 
 	// Build host multiaddress
-	hostAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", routedHost.ID().Pretty()))
+	hostAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", routedHost.ID()))
 
 	// Now we can build a full multiaddress to reach this host
 	// by encapsulating both addresses:
@@ -96,7 +94,7 @@ func makeRoutedHost(listenPort int, randseed int64, bootstrapPeers []peer.AddrIn
 		log.Println(addr.Encapsulate(hostAddr))
 	}
 
-	log.Printf("Now run \"./routed-echo -l %d -d %s%s\" on a different terminal\n", listenPort+1, routedHost.ID().Pretty(), globalFlag)
+	log.Printf("Now run \"./routed-echo -l %d -d %s%s\" on a different terminal\n", listenPort+1, routedHost.ID(), globalFlag)
 
 	return routedHost, nil
 }

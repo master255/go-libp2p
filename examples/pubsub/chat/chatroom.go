@@ -1,5 +1,3 @@
-//go:build !go1.21
-
 package main
 
 import (
@@ -73,7 +71,7 @@ func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, selfID peer.ID, nickna
 func (cr *ChatRoom) Publish(message string) error {
 	m := ChatMessage{
 		Message:    message,
-		SenderID:   cr.self.Pretty(),
+		SenderID:   cr.self.String(),
 		SenderNick: cr.nick,
 	}
 	msgBytes, err := json.Marshal(m)

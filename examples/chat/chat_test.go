@@ -1,5 +1,3 @@
-//go:build !go1.21
-
 package main
 
 import (
@@ -51,7 +49,7 @@ func TestMain(t *testing.T) {
 			cancel() // end the test
 		})
 
-		dest := fmt.Sprintf("/ip4/127.0.0.1/tcp/%v/p2p/%s", port1, h1.ID().Pretty())
+		dest := fmt.Sprintf("/ip4/127.0.0.1/tcp/%v/p2p/%s", port1, h1.ID())
 
 		h2, err := makeHost(port2, rand.Reader)
 		if err != nil {

@@ -670,7 +670,9 @@ func (h *BasicHost) NewStream(ctx context.Context, p peer.ID, pids ...protocol.I
 	}
 
 	if pref != "" {
-		s.SetProtocol(pref)
+		if err := s.SetProtocol(pref); err != nil {
+			return nil, err
+		}
 		lzcon := msmux.NewMSSelect(s, pref)
 		return &streamWrapper{
 			Stream: s,

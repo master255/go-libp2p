@@ -1,5 +1,3 @@
-//go:build !go1.21
-
 /*
  *
  * The MIT License (MIT)
@@ -189,7 +187,7 @@ func startPeer(ctx context.Context, h host.Host, streamHandler network.StreamHan
 		return
 	}
 
-	log.Printf("Run './chat -d /ip4/127.0.0.1/tcp/%v/p2p/%s' on another console.\n", port, h.ID().Pretty())
+	log.Printf("Run './chat -d /ip4/127.0.0.1/tcp/%v/p2p/%s' on another console.\n", port, h.ID())
 	log.Println("You can replace 127.0.0.1 with public IP as well.")
 	log.Println("Waiting for incoming connection")
 	log.Println()
