@@ -17,8 +17,6 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 )
 
-const defaultUserAgent = "libp2p"
-
 // NATManager is a simple interface to manage NAT devices.
 // It listens Listen and ListenClose notifications from the network.Network,
 // and tries to obtain port mappings for those.
@@ -46,7 +44,13 @@ type nat interface {
 }
 
 // so we can mock it in tests
-var discoverNAT = func(ctx context.Context, userAgent string) (nat, error) { return inat.DiscoverNAT(ctx, userAgent) }
+var discoverNAT = func(ctx context.Context, userAgent string) (nat, error) {
+	if userAgent != "" {
+		return inat.DiscoverNATWithUserAgent(ctx, userAgent)
+	} else {
+		return inat.DiscoverNAT(ctx)
+	}
+}
 
 // natManager takes care of adding + removing port mappings to the nat.
 // Initialized with the host if it has a NATPortMap option enabled.
@@ -78,7 +82,6 @@ func newNATManager(net network.Network, opts ...Option) (*natManager, error) {
 		ctx:       ctx,
 		ctxCancel: cancel,
 		tracked:   make(map[entry]bool),
-		userAgent: defaultUserAgent,
 	}
 
 	for _, opt := range opts {

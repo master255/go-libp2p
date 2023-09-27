@@ -33,8 +33,12 @@ type entry struct {
 // so we can mock it in tests
 var discoverGateway = nat.DiscoverGateway
 
-// DiscoverNAT looks for a NAT device in the network and returns an object that can manage port mappings.
-func DiscoverNAT(ctx context.Context, userAgent string) (*NAT, error) {
+func DiscoverNAT(ctx context.Context) (*NAT, error) {
+	return DiscoverNATWithUserAgent(ctx, "libp2p")
+}
+
+// DiscoverNATWithUserAgent looks for a NAT device in the network and returns an object that can manage port mappings.
+func DiscoverNATWithUserAgent(ctx context.Context, userAgent string) (*NAT, error) {
 	natInstance, err := discoverGateway(ctx)
 	if err != nil {
 		return nil, err

@@ -33,7 +33,7 @@ func TestAddMapping(t *testing.T) {
 	defer reset()
 
 	mockNAT.EXPECT().GetExternalAddress().Return(net.IPv4(1, 2, 3, 4), nil)
-	nat, err := DiscoverNAT(context.Background(), "userAgent")
+	nat, err := DiscoverNAT(context.Background())
 	require.NoError(t, err)
 
 	mockNAT.EXPECT().AddPortMapping(gomock.Any(), "tcp", 10000, gomock.Any(), MappingDuration).Return(1234, nil)
@@ -53,7 +53,7 @@ func TestRemoveMapping(t *testing.T) {
 	defer reset()
 
 	mockNAT.EXPECT().GetExternalAddress().Return(net.IPv4(1, 2, 3, 4), nil)
-	nat, err := DiscoverNAT(context.Background(), "userAgent")
+	nat, err := DiscoverNAT(context.Background())
 	require.NoError(t, err)
 	mockNAT.EXPECT().AddPortMapping(gomock.Any(), "tcp", 10000, gomock.Any(), MappingDuration).Return(1234, nil)
 	require.NoError(t, nat.AddMapping(context.Background(), "tcp", 10000))
