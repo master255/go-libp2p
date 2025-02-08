@@ -29,12 +29,16 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
+var netListenUDP ListenUDPFn = func(network string, laddr *net.UDPAddr) (net.PacketConn, error) {
+	return net.ListenUDP(network, laddr)
+}
+
 func getTransport(t *testing.T, opts ...Option) (*WebRTCTransport, peer.ID) {
 	t.Helper()
 	privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519, -1)
 	require.NoError(t, err)
 	rcmgr := &network.NullResourceManager{}
-	transport, err := New(privKey, nil, nil, rcmgr, opts...)
+	transport, err := New(privKey, nil, nil, rcmgr, netListenUDP, opts...)
 	require.NoError(t, err)
 	peerID, err := peer.IDFromPrivateKey(privKey)
 	require.NoError(t, err)
@@ -45,7 +49,7 @@ func getTransport(t *testing.T, opts ...Option) (*WebRTCTransport, peer.ID) {
 func TestNullRcmgrTransport(t *testing.T) {
 	privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519, -1)
 	require.NoError(t, err)
-	transport, err := New(privKey, nil, nil, nil)
+	transport, err := New(privKey, nil, nil, nil, netListenUDP)
 	require.NoError(t, err)
 
 	listenTransport, pid := getTransport(t)
@@ -1004,4 +1008,33 @@ func TestManyConnections(t *testing.T) {
 			t.Fatalf("timed out")
 		}
 	}
+}
+
+func TestConnectionClosedWhenRemoteCloses(t *testing.T) {
+	listenT, p := getTransport(t)
+	listener, err := listenT.Listen(ma.StringCast("/ip4/127.0.0.1/udp/0/webrtc-direct"))
+	require.NoError(t, err)
+	defer listener.Close()
+
+	accepted := make(chan struct{})
+	dialer, _ := getTransport(t)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c, err := listener.Accept()
+		close(accepted)
+		if !assert.NoError(t, err) {
+			return
+		}
+		assert.Eventually(t, func() bool {
+			return c.IsClosed()
+		}, 5*time.Second, 50*time.Millisecond)
+	}()
+
+	c, err := dialer.Dial(context.Background(), listener.Multiaddr(), p)
+	require.NoError(t, err)
+	<-accepted
+	c.Close()
+	wg.Wait()
 }

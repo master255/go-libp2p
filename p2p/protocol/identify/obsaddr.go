@@ -213,6 +213,48 @@ func (o *ObservedAddrManager) AddrsFor(addr ma.Multiaddr) (addrs []ma.Multiaddr)
 	return res
 }
 
+// appendInferredAddrs infers the external address of other transports that
+// share the local thin waist with a transport that we have do observations for.
+//
+// e.g. If we have observations for a QUIC address on port 9000, and we are
+// listening on the same interface and port 9000 for WebTransport, we can infer
+// the external WebTransport address.
+func (o *ObservedAddrManager) appendInferredAddrs(twToObserverSets map[string][]*observerSet, addrs []ma.Multiaddr) []ma.Multiaddr {
+	if twToObserverSets == nil {
+		twToObserverSets = make(map[string][]*observerSet)
+		for localTWStr := range o.externalAddrs {
+			twToObserverSets[localTWStr] = append(twToObserverSets[localTWStr], o.getTopExternalAddrs(localTWStr)...)
+		}
+	}
+	lAddrs, err := o.interfaceListenAddrs()
+	if err != nil {
+		log.Warnw("failed to get interface resolved listen addrs. Using just the listen addrs", "error", err)
+		lAddrs = nil
+	}
+	lAddrs = append(lAddrs, o.listenAddrs()...)
+	seenTWs := make(map[string]struct{})
+	for _, a := range lAddrs {
+		if _, ok := o.localAddrs[string(a.Bytes())]; ok {
+			// We already have this address in the list
+			continue
+		}
+		if _, ok := seenTWs[string(a.Bytes())]; ok {
+			// We've already added this
+			continue
+		}
+		seenTWs[string(a.Bytes())] = struct{}{}
+		a = o.normalize(a)
+		t, err := thinWaistForm(a)
+		if err != nil {
+			continue
+		}
+		for _, s := range twToObserverSets[string(t.TW.Bytes())] {
+			addrs = append(addrs, s.cacheMultiaddr(t.Rest))
+		}
+	}
+	return addrs
+}
+
 // Addrs return all activated observed addresses
 func (o *ObservedAddrManager) Addrs() []ma.Multiaddr {
 	o.mu.RLock()
@@ -228,6 +270,8 @@ func (o *ObservedAddrManager) Addrs() []ma.Multiaddr {
 			addrs = append(addrs, s.cacheMultiaddr(t.Rest))
 		}
 	}
+
+	addrs = o.appendInferredAddrs(m, addrs)
 	return addrs
 }
 
@@ -291,6 +335,11 @@ func (o *ObservedAddrManager) worker() {
 	}
 }
 
+func isRelayedAddress(a ma.Multiaddr) bool {
+	_, err := a.ValueForProtocol(ma.P_CIRCUIT)
+	return err == nil
+}
+
 func (o *ObservedAddrManager) shouldRecordObservation(conn connMultiaddrs, observed ma.Multiaddr) (shouldRecord bool, localTW thinWaist, observedTW thinWaist) {
 	if conn == nil || observed == nil {
 		return false, thinWaist{}, thinWaist{}
@@ -303,6 +352,12 @@ func (o *ObservedAddrManager) shouldRecordObservation(conn connMultiaddrs, obser
 
 	// Provided by NAT64 peers, these addresses are specific to the peer and not publicly routable
 	if manet.IsNAT64IPv4ConvertedIPv6Addr(observed) {
+		return false, thinWaist{}, thinWaist{}
+	}
+
+	// Ignore p2p-circuit addresses. These are the observed address of the relay.
+	// Not useful for us.
+	if isRelayedAddress(observed) {
 		return false, thinWaist{}, thinWaist{}
 	}
 
@@ -366,7 +421,7 @@ func (o *ObservedAddrManager) maybeRecordObservation(conn connMultiaddrs, observ
 	if !shouldRecord {
 		return
 	}
-	log.Debugw("added own observed listen addr", "observed", observed)
+	log.Debugw("added own observed listen addr", "conn", conn, "observed", observed)
 
 	o.mu.Lock()
 	defer o.mu.Unlock()

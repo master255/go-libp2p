@@ -31,6 +31,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	tls "github.com/libp2p/go-libp2p/p2p/security/tls"
+	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	libp2pwebrtc "github.com/libp2p/go-libp2p/p2p/transport/webrtc"
 	"go.uber.org/mock/gomock"
 
@@ -93,6 +94,73 @@ var transportsToTest = []TransportTestCase{
 				libp2pOpts = append(libp2pOpts, libp2p.NoListenAddrs)
 			} else {
 				libp2pOpts = append(libp2pOpts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+			}
+			h, err := libp2p.New(libp2pOpts...)
+			require.NoError(t, err)
+			return h
+		},
+	},
+	{
+		Name: "TCP-Shared / TLS / Yamux",
+		HostGenerator: func(t *testing.T, opts TransportTestCaseOpts) host.Host {
+			libp2pOpts := transformOpts(opts)
+			libp2pOpts = append(libp2pOpts, libp2p.ShareTCPListener())
+			libp2pOpts = append(libp2pOpts, libp2p.Security(tls.ID, tls.New))
+			libp2pOpts = append(libp2pOpts, libp2p.Muxer(yamux.ID, yamux.DefaultTransport))
+			if opts.NoListen {
+				libp2pOpts = append(libp2pOpts, libp2p.NoListenAddrs)
+			} else {
+				libp2pOpts = append(libp2pOpts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+			}
+			h, err := libp2p.New(libp2pOpts...)
+			require.NoError(t, err)
+			return h
+		},
+	},
+	{
+		Name: "TCP-Shared-WithMetrics / TLS / Yamux",
+		HostGenerator: func(t *testing.T, opts TransportTestCaseOpts) host.Host {
+			libp2pOpts := transformOpts(opts)
+			libp2pOpts = append(libp2pOpts, libp2p.ShareTCPListener())
+			libp2pOpts = append(libp2pOpts, libp2p.Security(tls.ID, tls.New))
+			libp2pOpts = append(libp2pOpts, libp2p.Muxer(yamux.ID, yamux.DefaultTransport))
+			libp2pOpts = append(libp2pOpts, libp2p.Transport(tcp.NewTCPTransport, tcp.WithMetrics()))
+			if opts.NoListen {
+				libp2pOpts = append(libp2pOpts, libp2p.NoListenAddrs)
+			} else {
+				libp2pOpts = append(libp2pOpts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+			}
+			h, err := libp2p.New(libp2pOpts...)
+			require.NoError(t, err)
+			return h
+		},
+	},
+	{
+		Name: "TCP-WithMetrics / TLS / Yamux",
+		HostGenerator: func(t *testing.T, opts TransportTestCaseOpts) host.Host {
+			libp2pOpts := transformOpts(opts)
+			libp2pOpts = append(libp2pOpts, libp2p.Security(tls.ID, tls.New))
+			libp2pOpts = append(libp2pOpts, libp2p.Muxer(yamux.ID, yamux.DefaultTransport))
+			libp2pOpts = append(libp2pOpts, libp2p.Transport(tcp.NewTCPTransport, tcp.WithMetrics()))
+			if opts.NoListen {
+				libp2pOpts = append(libp2pOpts, libp2p.NoListenAddrs)
+			} else {
+				libp2pOpts = append(libp2pOpts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+			}
+			h, err := libp2p.New(libp2pOpts...)
+			require.NoError(t, err)
+			return h
+		},
+	},
+	{
+		Name: "WebSocket-Shared",
+		HostGenerator: func(t *testing.T, opts TransportTestCaseOpts) host.Host {
+			libp2pOpts := transformOpts(opts)
+			libp2pOpts = append(libp2pOpts, libp2p.ShareTCPListener())
+			if opts.NoListen {
+				libp2pOpts = append(libp2pOpts, libp2p.NoListenAddrs)
+			} else {
+				libp2pOpts = append(libp2pOpts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0/ws"))
 			}
 			h, err := libp2p.New(libp2pOpts...)
 			require.NoError(t, err)
@@ -767,6 +835,34 @@ func TestConnDroppedWhenBlocked(t *testing.T) {
 				t.Fatal("expected no connected event. Connection should have failed")
 			case <-time.After(time.Second):
 			}
+		})
+	}
+}
+
+// TestConnClosedWhenRemoteCloses tests that a connection is closed locally when it's closed by remote
+func TestConnClosedWhenRemoteCloses(t *testing.T) {
+	for _, tc := range transportsToTest {
+		t.Run(tc.Name, func(t *testing.T) {
+			server := tc.HostGenerator(t, TransportTestCaseOpts{})
+			client := tc.HostGenerator(t, TransportTestCaseOpts{NoListen: true})
+			defer server.Close()
+			defer client.Close()
+
+			client.Peerstore().AddAddrs(server.ID(), server.Addrs(), peerstore.PermanentAddrTTL)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			err := client.Connect(ctx, peer.AddrInfo{ID: server.ID(), Addrs: server.Addrs()})
+			require.NoError(t, err)
+
+			require.Eventually(t, func() bool {
+				return server.Network().Connectedness(client.ID()) != network.NotConnected
+			}, 5*time.Second, 50*time.Millisecond)
+			for _, c := range client.Network().ConnsToPeer(server.ID()) {
+				c.Close()
+			}
+			require.Eventually(t, func() bool {
+				return server.Network().Connectedness(client.ID()) == network.NotConnected
+			}, 5*time.Second, 50*time.Millisecond)
 		})
 	}
 }
