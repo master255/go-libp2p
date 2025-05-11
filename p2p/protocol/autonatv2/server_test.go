@@ -445,7 +445,7 @@ func TestRateLimiterStress(t *testing.T) {
 							success.Add(1)
 							peerSuccesses[j].Add(1)
 						}
-						if r.AcceptDialDataRequest() {
+						if r.AcceptDialDataRequest(p) {
 							dialDataSuccesses.Add(1)
 						}
 						r.CompleteRequest(p)
@@ -588,13 +588,6 @@ func TestDefaultAmplificationAttackPrevention(t *testing.T) {
 
 	t2 := ma.StringCast("/ip4/1.1.1.1/tcp/1235") // different IP
 	require.True(t, amplificationAttackPrevention(q2, t2))
-
-	// always ask dial data for dns addrs
-	d1 := ma.StringCast("/dns/localhost/udp/1/quic-v1")
-	d2 := ma.StringCast("/dnsaddr/libp2p.io/tcp/1")
-	require.True(t, amplificationAttackPrevention(d1, t1))
-	require.True(t, amplificationAttackPrevention(d2, t1))
-
 }
 
 func FuzzServerDialRequest(f *testing.F) {

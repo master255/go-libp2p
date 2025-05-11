@@ -2,30 +2,25 @@ package pstoreds
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
 	pstore "github.com/libp2p/go-libp2p/core/peerstore"
 	pt "github.com/libp2p/go-libp2p/p2p/host/peerstore/test"
 
-	mockclock "github.com/benbjohnson/clock"
+	mockClock "github.com/benbjohnson/clock"
 	ds "github.com/ipfs/go-datastore"
-	"github.com/ipfs/go-datastore/sync"
+	badger "github.com/ipfs/go-ds-badger"
+	leveldb "github.com/ipfs/go-ds-leveldb"
 	"github.com/stretchr/testify/require"
 )
-
-func mapDBStore(tb testing.TB) (ds.Batching, func()) {
-	store := ds.NewMapDatastore()
-	closer := func() {
-		store.Close()
-	}
-	return sync.MutexWrap(store), closer
-}
 
 type datastoreFactory func(tb testing.TB) (ds.Batching, func())
 
 var dstores = map[string]datastoreFactory{
-	"MapDB": mapDBStore,
+	// "Badger": badgerStore,
+	"Leveldb": leveldbStore,
 }
 
 func TestDsPeerstore(t *testing.T) {
@@ -54,7 +49,7 @@ func TestDsAddrBook(t *testing.T) {
 			opts := DefaultOpts()
 			opts.GCPurgeInterval = 1 * time.Second
 			opts.CacheSize = 1024
-			clk := mockclock.NewMock()
+			clk := mockClock.NewMock()
 			opts.Clock = clk
 
 			pt.TestAddrBook(t, addressBookFactory(t, dsFactory, opts), clk)
@@ -64,7 +59,7 @@ func TestDsAddrBook(t *testing.T) {
 			opts := DefaultOpts()
 			opts.GCPurgeInterval = 1 * time.Second
 			opts.CacheSize = 0
-			clk := mockclock.NewMock()
+			clk := mockClock.NewMock()
 			opts.Clock = clk
 
 			pt.TestAddrBook(t, addressBookFactory(t, dsFactory, opts), clk)
@@ -103,6 +98,37 @@ func BenchmarkDsPeerstore(b *testing.B) {
 			pt.BenchmarkPeerstore(b, peerstoreFactory(b, dsFactory, cacheless), "Cacheless")
 		})
 	}
+}
+
+// Doesn't work on 32bit because badger.
+//
+//lint:ignore U1000 disabled for now
+func badgerStore(tb testing.TB) (ds.Batching, func()) {
+	dataPath, err := os.MkdirTemp(os.TempDir(), "badger")
+	if err != nil {
+		tb.Fatal(err)
+	}
+	store, err := badger.NewDatastore(dataPath, nil)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	closer := func() {
+		store.Close()
+		os.RemoveAll(dataPath)
+	}
+	return store, closer
+}
+
+func leveldbStore(tb testing.TB) (ds.Batching, func()) {
+	// Intentionally test in-memory because disks suck, especially in CI.
+	store, err := leveldb.NewDatastore("", nil)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	closer := func() {
+		store.Close()
+	}
+	return store, closer
 }
 
 func peerstoreFactory(tb testing.TB, storeFactory datastoreFactory, opts Options) pt.PeerstoreFactory {

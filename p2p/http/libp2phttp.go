@@ -45,9 +45,9 @@ const LegacyWellKnownProtocols = "/.well-known/libp2p"
 const peerMetadataLimit = 8 << 10 // 8KB
 const peerMetadataLRUSize = 256   // How many different peer's metadata to keep in our LRU cache
 
-// DefaultNewStreamTimeout is the default value for new stream establishing timeout.
+// defaultNewStreamTimeout is the default value for new stream establishing timeout.
 // It is the same value as basic_host.DefaultNegotiationTimeout
-var DefaultNewStreamTimeout = 10 * time.Second
+var defaultNewStreamTimeout = 10 * time.Second
 
 type clientPeerIDContextKey struct{}
 type serverPeerIDContextKey struct{}
@@ -503,9 +503,9 @@ func (rt *streamRoundTripper) RoundTrip(r *http.Request) (*http.Response, error)
 	// If r.Context() timeout is greater than DefaultNewStreamTimeout
 	// use DefaultNewStreamTimeout for new stream negotiation.
 	newStreamCtx := r.Context()
-	if deadline, ok := newStreamCtx.Deadline(); !ok || deadline.After(time.Now().Add(DefaultNewStreamTimeout)) {
+	if deadline, ok := newStreamCtx.Deadline(); !ok || deadline.After(time.Now().Add(defaultNewStreamTimeout)) {
 		var cancel context.CancelFunc
-		newStreamCtx, cancel = context.WithTimeout(context.Background(), DefaultNewStreamTimeout)
+		newStreamCtx, cancel = context.WithTimeout(context.Background(), defaultNewStreamTimeout)
 		defer cancel()
 	}
 

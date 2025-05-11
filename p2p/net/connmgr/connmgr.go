@@ -141,6 +141,11 @@ func NewConnManager(low, hi int, opts ...Option) (*BasicConnMgr, error) {
 
 	cm.ctx, cm.cancel = context.WithCancel(context.Background())
 
+	if cfg.emergencyTrim {
+		// When we're running low on memory, immediately trigger a trim.
+		cm.unregisterMemoryWatcher = registerWatchdog(cm.memoryEmergency)
+	}
+
 	decay, _ := NewDecayer(cfg.decayer, cm)
 	cm.decayer = decay
 
@@ -149,11 +154,11 @@ func NewConnManager(low, hi int, opts ...Option) (*BasicConnMgr, error) {
 	return cm, nil
 }
 
-// ForceTrim trims connections down to the low watermark ignoring silence period, grace period,
-// or protected status. It prioritizes closing Unprotected connections. If after closing all
-// unprotected connections, we still have more than lowWaterMark connections, it'll close
-// protected connections.
-func (cm *BasicConnMgr) ForceTrim() {
+// memoryEmergency is run when we run low on memory.
+// Close connections until we right the low watermark.
+// We don't pay attention to the silence period or the grace period.
+// We try to not kill protected connections, but if that turns out to be necessary, not connection is safe!
+func (cm *BasicConnMgr) memoryEmergency() {
 	connCount := int(cm.connCount.Load())
 	target := connCount - cm.cfg.lowWater
 	if target < 0 {

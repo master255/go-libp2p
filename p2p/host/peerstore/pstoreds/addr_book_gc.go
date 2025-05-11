@@ -278,7 +278,7 @@ func (gc *dsAddrBookGc) purgeStore() {
 	for result := range results.Next() {
 		record.Reset()
 		if err = proto.Unmarshal(result.Value, record); err != nil {
-			log.Warnf("failed to unmarshal record during GC purge: key=%s, err=%v", result.Key, err)
+			// TODO log
 			continue
 		}
 

@@ -213,7 +213,7 @@ func (as *server) serveDialRequest(s network.Stream) EventDialRequestCompleted {
 	nonce := msg.GetDialRequest().Nonce
 
 	isDialDataRequired := as.dialDataRequestPolicy(s.Conn().RemoteMultiaddr(), dialAddr)
-	if isDialDataRequired && !as.limiter.AcceptDialDataRequest() {
+	if isDialDataRequired && !as.limiter.AcceptDialDataRequest(p) {
 		msg = pb.Message{
 			Msg: &pb.Message_DialResponse{
 				DialResponse: &pb.DialResponse{
@@ -442,7 +442,7 @@ func (r *rateLimiter) Accept(p peer.ID) bool {
 	return true
 }
 
-func (r *rateLimiter) AcceptDialDataRequest() bool {
+func (r *rateLimiter) AcceptDialDataRequest(p peer.ID) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
@@ -522,9 +522,6 @@ func amplificationAttackPrevention(observedAddr, dialAddr ma.Multiaddr) bool {
 	if err != nil {
 		return true
 	}
-	dialIP, err := manet.ToIP(dialAddr) // can be dns addr
-	if err != nil {
-		return true
-	}
+	dialIP, _ := manet.ToIP(dialAddr) // must be an IP multiaddr
 	return !observedIP.Equal(dialIP)
 }

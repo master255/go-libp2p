@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -205,6 +204,29 @@ func TestHostAddrsFactory(t *testing.T) {
 	if len(addrs) != 1 {
 		t.Fatalf("didn't expect change in returned addresses.")
 	}
+}
+
+func TestLocalIPChangesWhenListenAddrChanges(t *testing.T) {
+	// no listen addrs
+	h, err := NewHost(swarmt.GenSwarm(t, swarmt.OptDialOnly), nil)
+	require.NoError(t, err)
+	h.Start()
+	defer h.Close()
+
+	h.addrMu.Lock()
+	h.filteredInterfaceAddrs = nil
+	h.allInterfaceAddrs = nil
+	h.addrMu.Unlock()
+
+	// change listen addrs and verify local IP addr is not nil again
+	require.NoError(t, h.Network().Listen(ma.StringCast("/ip4/0.0.0.0/tcp/0")))
+	h.SignalAddressChange()
+	time.Sleep(1 * time.Second)
+
+	h.addrMu.RLock()
+	defer h.addrMu.RUnlock()
+	require.NotEmpty(t, h.filteredInterfaceAddrs)
+	require.NotEmpty(t, h.allInterfaceAddrs)
 }
 
 func TestAllAddrs(t *testing.T) {
@@ -598,13 +620,8 @@ func TestAddrChangeImmediatelyIfAddressNonEmpty(t *testing.T) {
 	ctx := context.Background()
 	taddrs := []ma.Multiaddr{ma.StringCast("/ip4/1.2.3.4/tcp/1234")}
 
-	starting := make(chan struct{}, 1)
-	var count atomic.Int32
+	starting := make(chan struct{})
 	h, err := NewHost(swarmt.GenSwarm(t), &HostOpts{AddrsFactory: func(addrs []ma.Multiaddr) []ma.Multiaddr {
-		// The first call here is made from the constructor. Don't block.
-		if count.Add(1) == 1 {
-			return addrs
-		}
 		<-starting
 		return taddrs
 	}})
@@ -612,11 +629,11 @@ func TestAddrChangeImmediatelyIfAddressNonEmpty(t *testing.T) {
 	defer h.Close()
 
 	sub, err := h.EventBus().Subscribe(&event.EvtLocalAddressesUpdated{})
+	close(starting)
 	if err != nil {
 		t.Error(err)
 	}
 	defer sub.Close()
-	close(starting)
 	h.Start()
 
 	expected := event.EvtLocalAddressesUpdated{
@@ -735,7 +752,7 @@ func TestHostAddrChangeDetection(t *testing.T) {
 		lk.Lock()
 		currentAddrSet = i
 		lk.Unlock()
-		h.addressManager.triggerAddrsUpdate()
+		h.SignalAddressChange()
 		evt := waitForAddrChangeEvent(ctx, sub, t)
 		if !updatedAddrEventsEqual(expectedEvents[i-1], evt) {
 			t.Errorf("change events not equal: \n\texpected: %v \n\tactual: %v", expectedEvents[i-1], evt)

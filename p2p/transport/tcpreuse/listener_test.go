@@ -17,9 +17,6 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/transport"
-	tptu "github.com/libp2p/go-libp2p/p2p/net/upgrader"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	"github.com/multiformats/go-multistream"
@@ -56,17 +53,6 @@ func selfSignedTLSConfig(t *testing.T) *tls.Config {
 	return tlsConfig
 }
 
-type maListener struct {
-	transport.GatedMaListener
-}
-
-var _ manet.Listener = &maListener{}
-
-func (ml *maListener) Accept() (manet.Conn, error) {
-	c, _, err := ml.GatedMaListener.Accept()
-	return c, err
-}
-
 type wsHandler struct{ conns chan *websocket.Conn }
 
 func (wh wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -75,19 +61,12 @@ func (wh wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	wh.conns <- c
 }
 
-func upgrader(t *testing.T) transport.Upgrader {
-	t.Helper()
-	upd, err := tptu.New(nil, nil, nil, &network.NullResourceManager{}, nil)
-	require.NoError(t, err)
-	return upd
-}
-
 func TestListenerSingle(t *testing.T) {
 	listenAddr := ma.StringCast("/ip4/0.0.0.0/tcp/0")
 	const N = 64
 	for _, enableReuseport := range []bool{true, false} {
 		t.Run(fmt.Sprintf("multistream-reuseport:%v", enableReuseport), func(t *testing.T) {
-			cm := NewConnMgr(enableReuseport, upgrader(t))
+			cm := NewConnMgr(enableReuseport, nil, nil)
 			l, err := cm.DemultiplexedListen(listenAddr, DemultiplexedConnType_MultistreamSelect)
 			require.NoError(t, err)
 			go func() {
@@ -117,7 +96,7 @@ func TestListenerSingle(t *testing.T) {
 
 			var wg sync.WaitGroup
 			for i := 0; i < N; i++ {
-				c, _, err := l.Accept()
+				c, err := l.Accept()
 				require.NoError(t, err)
 				wg.Add(1)
 				go func() {
@@ -138,12 +117,12 @@ func TestListenerSingle(t *testing.T) {
 		})
 
 		t.Run(fmt.Sprintf("WebSocket-reuseport:%v", enableReuseport), func(t *testing.T) {
-			cm := NewConnMgr(enableReuseport, upgrader(t))
+			cm := NewConnMgr(enableReuseport, nil, nil)
 			l, err := cm.DemultiplexedListen(listenAddr, DemultiplexedConnType_HTTP)
 			require.NoError(t, err)
 			wh := wsHandler{conns: make(chan *websocket.Conn, acceptQueueSize)}
 			go func() {
-				http.Serve(manet.NetListener(&maListener{GatedMaListener: l}), wh)
+				http.Serve(manet.NetListener(l), wh)
 			}()
 			go func() {
 				d := websocket.Dialer{}
@@ -190,14 +169,14 @@ func TestListenerSingle(t *testing.T) {
 		})
 
 		t.Run(fmt.Sprintf("WebSocketTLS-reuseport:%v", enableReuseport), func(t *testing.T) {
-			cm := NewConnMgr(enableReuseport, upgrader(t))
+			cm := NewConnMgr(enableReuseport, nil, nil)
 			l, err := cm.DemultiplexedListen(listenAddr, DemultiplexedConnType_TLS)
 			require.NoError(t, err)
 			defer l.Close()
 			wh := wsHandler{conns: make(chan *websocket.Conn, acceptQueueSize)}
 			go func() {
 				s := http.Server{Handler: wh, TLSConfig: selfSignedTLSConfig(t)}
-				s.ServeTLS(manet.NetListener(&maListener{GatedMaListener: l}), "", "")
+				s.ServeTLS(manet.NetListener(l), "", "")
 			}()
 			go func() {
 				d := websocket.Dialer{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
@@ -249,7 +228,7 @@ func TestListenerMultiplexed(t *testing.T) {
 	listenAddr := ma.StringCast("/ip4/0.0.0.0/tcp/0")
 	const N = 20
 	for _, enableReuseport := range []bool{true, false} {
-		cm := NewConnMgr(enableReuseport, upgrader(t))
+		cm := NewConnMgr(enableReuseport, nil, nil)
 		msl, err := cm.DemultiplexedListen(listenAddr, DemultiplexedConnType_MultistreamSelect)
 		require.NoError(t, err)
 		defer msl.Close()
@@ -260,7 +239,7 @@ func TestListenerMultiplexed(t *testing.T) {
 		require.Equal(t, wsl.Multiaddr(), msl.Multiaddr())
 		wh := wsHandler{conns: make(chan *websocket.Conn, acceptQueueSize)}
 		go func() {
-			http.Serve(manet.NetListener(&maListener{GatedMaListener: wsl}), wh)
+			http.Serve(manet.NetListener(wsl), wh)
 		}()
 
 		wssl, err := cm.DemultiplexedListen(listenAddr, DemultiplexedConnType_TLS)
@@ -270,7 +249,7 @@ func TestListenerMultiplexed(t *testing.T) {
 		whs := wsHandler{conns: make(chan *websocket.Conn, acceptQueueSize)}
 		go func() {
 			s := http.Server{Handler: whs, TLSConfig: selfSignedTLSConfig(t)}
-			s.ServeTLS(manet.NetListener(&maListener{GatedMaListener: wssl}), "", "")
+			s.ServeTLS(manet.NetListener(wssl), "", "")
 		}()
 
 		// multistream connections
@@ -352,7 +331,7 @@ func TestListenerMultiplexed(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < N; i++ {
-				c, _, err := msl.Accept()
+				c, err := msl.Accept()
 				if !assert.NoError(t, err) {
 					return
 				}
@@ -425,7 +404,7 @@ func TestListenerMultiplexed(t *testing.T) {
 func TestListenerClose(t *testing.T) {
 	testClose := func(listenAddr ma.Multiaddr) {
 		// listen on port 0
-		cm := NewConnMgr(false, upgrader(t))
+		cm := NewConnMgr(false, nil, nil)
 		ml, err := cm.DemultiplexedListen(listenAddr, DemultiplexedConnType_MultistreamSelect)
 		require.NoError(t, err)
 		wl, err := cm.DemultiplexedListen(listenAddr, DemultiplexedConnType_HTTP)
@@ -480,7 +459,7 @@ func setDeferReset[T any](t testing.TB, ptr *T, val T) {
 func TestHitTimeout(t *testing.T) {
 	setDeferReset(t, &identifyConnTimeout, 100*time.Millisecond)
 	// listen on port 0
-	cm := NewConnMgr(false, upgrader(t))
+	cm := NewConnMgr(false, nil, nil)
 
 	listenAddr := ma.StringCast("/ip4/127.0.0.1/tcp/0")
 	ml, err := cm.DemultiplexedListen(listenAddr, DemultiplexedConnType_MultistreamSelect)

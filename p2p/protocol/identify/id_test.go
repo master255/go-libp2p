@@ -817,6 +817,12 @@ func TestLargePushMessage(t *testing.T) {
 }
 
 func TestIdentifyResponseReadTimeout(t *testing.T) {
+	timeout := identify.Timeout
+	identify.Timeout = 100 * time.Millisecond
+	defer func() {
+		identify.Timeout = timeout
+	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -826,12 +832,12 @@ func TestIdentifyResponseReadTimeout(t *testing.T) {
 	defer h2.Close()
 
 	h2p := h2.ID()
-	ids1, err := identify.NewIDService(h1, identify.WithTimeout(100*time.Millisecond))
+	ids1, err := identify.NewIDService(h1)
 	require.NoError(t, err)
 	defer ids1.Close()
 	ids1.Start()
 
-	ids2, err := identify.NewIDService(h2, identify.WithTimeout(100*time.Millisecond))
+	ids2, err := identify.NewIDService(h2)
 	require.NoError(t, err)
 	defer ids2.Close()
 	ids2.Start()
@@ -857,6 +863,12 @@ func TestIdentifyResponseReadTimeout(t *testing.T) {
 }
 
 func TestIncomingIDStreamsTimeout(t *testing.T) {
+	timeout := identify.Timeout
+	identify.Timeout = 100 * time.Millisecond
+	defer func() {
+		identify.Timeout = timeout
+	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -868,12 +880,12 @@ func TestIncomingIDStreamsTimeout(t *testing.T) {
 		defer h1.Close()
 		defer h2.Close()
 
-		ids1, err := identify.NewIDService(h1, identify.WithTimeout(100*time.Millisecond))
+		ids1, err := identify.NewIDService(h1)
 		require.NoError(t, err)
 		defer ids1.Close()
 		ids1.Start()
 
-		ids2, err := identify.NewIDService(h2, identify.WithTimeout(100*time.Millisecond))
+		ids2, err := identify.NewIDService(h2)
 		require.NoError(t, err)
 		defer ids2.Close()
 		ids2.Start()
